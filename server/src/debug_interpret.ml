@@ -593,7 +593,7 @@ let evaluate_operator
     | Minus_mon, [(ELit (LMoney x), _)] ->
       Lwt.return (ELit (LMoney (o_minus_mon x)))
     | Minus_dur, [(ELit (LDuration x), _)] ->
-      Lwt.return (ELit (LDuration (o_minus_dur x)))
+      Lwt.return (ELit (LDuration (o_minus_dur (rpos ()) x)))
     | ToInt_rat, [(ELit (LRat x), _)] ->
       Lwt.return (ELit (LInt (o_toint_rat x)))
     | ToInt_mon, [(ELit (LMoney x), _)] ->
@@ -619,7 +619,7 @@ let evaluate_operator
     | Add_dat_dur r, [(ELit (LDate x), _); (ELit (LDuration y), _)] ->
       Lwt.return (ELit (LDate (o_add_dat_dur r (rpos ()) x y)))
     | Add_dur_dur, [(ELit (LDuration x), _); (ELit (LDuration y), _)] ->
-      Lwt.return (ELit (LDuration (o_add_dur_dur x y)))
+      Lwt.return (ELit (LDuration (o_add_dur_dur (rpos ()) x y)))
     | Sub_int_int, [(ELit (LInt x), _); (ELit (LInt y), _)] ->
       Lwt.return (ELit (LInt (o_sub_int_int x y)))
     | Sub_rat_rat, [(ELit (LRat x), _); (ELit (LRat y), _)] ->
@@ -627,11 +627,11 @@ let evaluate_operator
     | Sub_mon_mon, [(ELit (LMoney x), _); (ELit (LMoney y), _)] ->
       Lwt.return (ELit (LMoney (o_sub_mon_mon x y)))
     | Sub_dat_dat, [(ELit (LDate x), _); (ELit (LDate y), _)] ->
-      Lwt.return (ELit (LDuration (o_sub_dat_dat x y)))
+      Lwt.return (ELit (LDuration (o_sub_dat_dat (rpos ()) x y)))
     | Sub_dat_dur r, [(ELit (LDate x), _); (ELit (LDuration y), _)] ->
       Lwt.return (ELit (LDate (o_sub_dat_dur r (rpos ()) x y)))
     | Sub_dur_dur, [(ELit (LDuration x), _); (ELit (LDuration y), _)] ->
-      Lwt.return (ELit (LDuration (o_sub_dur_dur x y)))
+      Lwt.return (ELit (LDuration (o_sub_dur_dur (rpos ()) x y)))
     | Mult_int_int, [(ELit (LInt x), _); (ELit (LInt y), _)] ->
       Lwt.return (ELit (LInt (o_mult_int_int x y)))
     | Mult_rat_rat, [(ELit (LRat x), _); (ELit (LRat y), _)] ->
@@ -699,7 +699,9 @@ let evaluate_operator
                 str))
       in
       Lwt.return (Mark.remove v)
-    | ValueFromJson _, _ -> failwith "todo"
+    | ValueFromJson (ty, str), [(ELit LUnit, _)] ->
+      Lwt.return (Mark.remove (Interpreter.json_literal_value ctx m pos ty str))
+    | ValueFromJson _, _ -> err ()
     | DebugPrint _, _ -> Lwt.return (ELit LUnit)
     | ( ( Minus_int | Minus_rat | Minus_mon | Minus_dur | ToInt_rat | ToInt_mon
         | ToRat_int | ToRat_mon | ToMoney_rat | ToMoney_int | Round_rat
