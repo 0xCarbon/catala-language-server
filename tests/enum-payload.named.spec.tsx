@@ -27,7 +27,7 @@ describe('Enum payload highlight with the EnumPayload segment in the diff path',
     const payloadRv = structValue(
       payloadDecl,
       new Map([
-        ['ratio', { value: { kind: 'Decimal', value: 0.26 }, attrs: [] }],
+        ['ratio', { value: { kind: 'Decimal', value: '0.26' }, attrs: [] }],
       ])
     );
     const enumDecl = (enumTyp as Extract<Typ, { kind: 'TEnum' }>).value;
@@ -61,8 +61,8 @@ describe('Enum payload highlight with the EnumPayload segment in the diff path',
           seg('EnumPayload', 'VariantA'),
           seg('StructField', 'ratio'),
         ],
-        expected: { value: { kind: 'Decimal', value: 0.26 }, attrs: [] },
-        actual: { value: { kind: 'Decimal', value: 0.25 }, attrs: [] },
+        expected: { value: { kind: 'Decimal', value: '0.26' }, attrs: [] },
+        actual: { value: { kind: 'Decimal', value: '0.25' }, attrs: [] },
       },
     ];
 

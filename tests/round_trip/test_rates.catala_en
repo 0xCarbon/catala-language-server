@@ -1,0 +1,69 @@
+> Using Rates
+
+```catala-metadata
+#[test]
+#[testcase.testui]
+#[testcase.test_description = ""]
+#[testcase.test_title = "A tenth"]
+declaration scope Scale_tenth:
+  output calc scope Rates.Scale
+```
+
+```catala
+scope Scale_tenth:
+  definition calc.rate equals 0.1
+  definition calc.base equals $123456789012.34
+  assertion (calc.scaled = 0.3)
+  assertion (calc.amount = $123456789012.34)
+```
+
+```catala-metadata
+#[test]
+#[testcase.testui]
+#[testcase.test_description = ""]
+#[testcase.test_title = "Nineteen significant digits"]
+declaration scope Scale_long:
+  output calc scope Rates.Scale
+```
+
+```catala
+scope Scale_long:
+  definition calc.rate equals 1234567890.123456789
+  definition calc.base equals -$0.05
+  assertion (calc.scaled = 3703703670.370370367)
+  assertion (calc.amount = -$0.05)
+```
+
+```catala-metadata
+#[test]
+#[testcase.testui]
+#[testcase.test_description = ""]
+#[testcase.test_title = "No finite decimal expansion"]
+declaration scope Scale_third:
+  output calc scope Rates.Scale
+```
+
+```catala
+scope Scale_third:
+  definition calc.rate equals (1.0 / 3.0)
+  definition calc.base equals $0.00
+  assertion (calc.scaled = 1.0)
+  assertion (calc.amount = $0.00)
+```
+
+```catala-metadata
+#[test]
+#[testcase.testui]
+#[testcase.test_description = ""]
+#[testcase.test_title = "Negative"]
+declaration scope Scale_negative:
+  output calc scope Rates.Scale
+```
+
+```catala
+scope Scale_negative:
+  definition calc.rate equals (-2.0 / 3.0)
+  definition calc.base equals $1.00
+  assertion (calc.scaled = -2.0)
+  assertion (calc.amount = $1.00)
+```

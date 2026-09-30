@@ -38,8 +38,8 @@ describe.each([
   {
     typ: { kind: 'TRat' } as Typ,
     name: 'RatEditor',
-    older: rv({ kind: 'Decimal', value: 153 }),
-    olderShown: '153',
+    older: rv({ kind: 'Decimal', value: '153.0' }),
+    olderShown: '153.0',
   },
   {
     typ: { kind: 'TMoney' } as Typ,

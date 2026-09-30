@@ -13,6 +13,7 @@ function cleanup(){
     rm -f written_*.catala_en written2_*.catala_en
     rm -f dup_assert.catala_en unqual.catala_en
     rm -f tint_inputs.json
+    rm -f rates_*.catala_en rates_*.json
 
 # ── a test that does not name its module ────────────────────────────────────
 # Only a hand edit unqualifies the tested scope; guessing a module would
@@ -79,6 +80,75 @@ catala testcase read test_tint.catala_en \
     > tint_inputs.json
 catala testcase serialize-inputs --input=tint_inputs.json | grep -q '"tint": "Red"' \
     || { echo "FAIL: a bare user-enum input was dropped from the serialized inputs"; exit 1; }
+
+# ── decimals and money are exact ───────────────────────────────────────────
+# A decimal crosses the JSON boundary as an exact string, never a binary float
+# (17 significant digits at best): written back, it is the literal the tester
+# wrote, or an exact division when it has no finite decimal expansion. Money
+# reaches the interpreter from integer cents, digit for digit.
+rates_json=$(catala testcase read test_rates.catala_en) \
+    || { echo "FAIL: read of exact decimals"; exit 1; }
+for d in '"0.1"' '"0.3"' '"1234567890.123456789"' '"3703703670.370370367"' \
+         '"1/3"' '"-2/3"' '"-2.0"'; do
+    echo "$rates_json" | grep -qF "[\"Decimal\",$d]" \
+        || { echo "FAIL: read does not carry the decimal $d exactly"; exit 1; }
+done
+echo "$rates_json" | catala testcase write --language en > rates_written.catala_en
+while IFS= read -r line; do
+    grep -qF "$line" rates_written.catala_en \
+        || { echo "FAIL: write did not reproduce '$line'"; exit 1; }
+done <<'LINES'
+definition scale.rate equals 0.1
+assertion (scale.scaled = 0.3)
+definition scale.rate equals 1234567890.123456789
+assertion (scale.scaled = 3703703670.370370367)
+definition scale.rate equals (1.0 / 3.0)
+definition scale.rate equals (-2.0 / 3.0)
+assertion (scale.scaled = -2.0)
+definition scale.base equals $123456789012.34
+definition scale.base equals -$0.05
+LINES
+clerk typecheck rates_written.catala_en || { echo "FAIL: written decimals do not typecheck"; exit 1; }
+# a fixed point, through both readers
+for reader in read partial-read; do
+    catala testcase $reader rates_written.catala_en | catala testcase write --language en \
+        | diff rates_written.catala_en - \
+        || { echo "FAIL: $reader|write changed the written decimals"; exit 1; }
+done
+# the runs agree with the assertions, and report the exact results
+for s in Scale_tenth Scale_long Scale_third Scale_negative; do
+    catala testcase run --scope $s test_rates.catala_en | grep -q '"assert_failures":false' \
+        || { echo "FAIL: $s does not pass"; exit 1; }
+done
+catala testcase run --scope Scale_long test_rates.catala_en \
+    | grep -qF '["Decimal","3703703670.370370367"]' \
+    || { echo "FAIL: the run did not report the exact decimal"; exit 1; }
+# inputs as the editor sends them to the interpreter
+rates_inputs() { # testing scope -> its inputs
+    echo "$rates_json" | node -e 'const d=JSON.parse(require("fs").readFileSync(0,"utf8"));
+        process.stdout.write(JSON.stringify(d.find((t)=>t.testing_scope===process.argv[1]).test_inputs))' "$1"
+}
+rates_inputs Scale_tenth > rates_tenth.json
+rates_inputs Scale_long > rates_long.json
+rates_inputs Scale_third > rates_third.json
+catala testcase serialize-inputs --input=rates_tenth.json > rates_tenth_serialized.json
+grep -qF '"base": "123456789012.34"' rates_tenth_serialized.json \
+    || { echo "FAIL: money input not serialized exactly: $(cat rates_tenth_serialized.json)"; exit 1; }
+grep -qF '"rate": "0.1"' rates_tenth_serialized.json \
+    || { echo "FAIL: decimal input not serialized exactly: $(cat rates_tenth_serialized.json)"; exit 1; }
+catala testcase serialize-inputs --input=rates_long.json | grep -qF '"base": "-0.05"' \
+    || { echo "FAIL: negative money input not serialized exactly"; exit 1; }
+catala testcase serialize-inputs --input=rates_third.json | grep -qF '"rate": "1/3"' \
+    || { echo "FAIL: decimal 1/3 not serialized exactly"; exit 1; }
+out=$(catala testcase run --scope Scale rates.catala_en --input=rates_long.json)
+echo "$out" | grep -qF '["Decimal","3703703670.370370367"]' \
+    || { echo "FAIL: run with inputs lost decimal digits: $out"; exit 1; }
+echo "$out" | grep -qF '["Money",-5]' \
+    || { echo "FAIL: run with inputs changed the money input: $out"; exit 1; }
+catala testcase run --scope Scale rates.catala_en --input=rates_tenth.json \
+    | grep -qF '["Money",12345678901234]' \
+    || { echo "FAIL: run with inputs changed a large money input"; exit 1; }
+rm -f rates_*.catala_en rates_*.json
 
 # ── a failed preparation is reported ────────────────────────────────────────
 # The run prepares the modules with clerk itself; when that fails, the tester

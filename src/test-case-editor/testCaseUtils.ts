@@ -10,6 +10,7 @@ import type {
 } from '../generated/catala_types';
 import { isAtomicRaw } from '../diff/diff';
 import { countUnsetIn } from '../editors/unsetValidation';
+import { formatCents } from '../shared/exactNumbers';
 
 export function renameIfNeeded(currentTests: TestList, newTest: Test): Test {
   const testNames = new Set(currentTests.map((test) => test.testing_scope));
@@ -64,9 +65,9 @@ export function renderAtomicValue(
     case 'Integer':
       return raw.value.toString();
     case 'Decimal':
-      return raw.value.toString();
+      return raw.value;
     case 'Money':
-      return (raw.value / 100).toFixed(2);
+      return formatCents(raw.value);
     case 'Date': {
       const date = raw.value;
       return `${date.year}-${String(date.month).padStart(2, '0')}-${String(date.day).padStart(2, '0')}`;

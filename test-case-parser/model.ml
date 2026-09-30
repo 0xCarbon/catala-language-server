@@ -87,6 +87,79 @@ let get_lang_strings =
   in
   function `Fr -> fr_strings | `En -> en_strings | `Pl -> pl_strings
 
+(* Decimals are exact rationals. They cross the JSON boundary as strings, never
+   as binary floats, which hold most decimals only approximately: in decimal
+   notation when the value has a finite decimal expansion ("0.1", "-2.5",
+   "3.0"), as "num/den" otherwise ("1/3"). Both spellings are also accepted by
+   the Catala JSON inputs. *)
+
+let decimal_of_string (s : string) : Q.t =
+  let invalid () = failwith (Printf.sprintf "Invalid decimal: %S" s) in
+  let digits d =
+    d <> "" && String.for_all (function '0' .. '9' -> true | _ -> false) d
+  in
+  let len = String.length s in
+  let neg = len > 0 && s.[0] = '-' in
+  let body = if neg then String.sub s 1 (len - 1) else s in
+  let blen = String.length body in
+  let q =
+    match String.index_opt body '/', String.index_opt body '.' with
+    | Some i, None ->
+      let num = String.sub body 0 i in
+      let den = String.sub body (i + 1) (blen - i - 1) in
+      if not (digits num && digits den) then invalid ();
+      let den = Z.of_string den in
+      if Z.equal den Z.zero then invalid ();
+      Q.make (Z.of_string num) den
+    | None, Some i ->
+      let units = String.sub body 0 i in
+      let frac = String.sub body (i + 1) (blen - i - 1) in
+      if not (digits units && (frac = "" || digits frac)) then invalid ();
+      Q.make
+        (Z.of_string (units ^ frac))
+        (Z.pow (Z.of_int 10) (String.length frac))
+    | None, None ->
+      if not (digits body) then invalid ();
+      Q.of_bigint (Z.of_string body)
+    | Some _, Some _ -> invalid ()
+  in
+  if neg then Q.neg q else q
+
+(* The inverse of [decimal_of_string]; decimal notation keeps at least one
+   fractional digit, as a Catala decimal literal does. *)
+let string_of_decimal (q : Q.t) : string =
+  let num = Q.num q and den = Q.den q in
+  let rec strip p d n =
+    if Z.equal (Z.rem d p) Z.zero then strip p (Z.div d p) (n + 1) else d, n
+  in
+  let rest, twos = strip (Z.of_int 2) den 0 in
+  let rest, fives = strip (Z.of_int 5) rest 0 in
+  if not (Z.equal rest Z.one) then Z.to_string num ^ "/" ^ Z.to_string den
+  else
+    (* [den] divides 10^k: the expansion has exactly k fractional digits *)
+    let k = max 1 (max twos fives) in
+    let scaled = Z.div (Z.mul (Z.abs num) (Z.pow (Z.of_int 10) k)) den in
+    let digits = Z.to_string scaled in
+    let digits =
+      if String.length digits <= k then
+        String.make (k + 1 - String.length digits) '0' ^ digits
+      else digits
+    in
+    let n = String.length digits in
+    Printf.sprintf "%s%s.%s"
+      (if Z.sign num < 0 then "-" else "")
+      (String.sub digits 0 (n - k))
+      (String.sub digits (n - k) k)
+
+(* An amount in cents as a decimal amount of units, as Catala JSON inputs read
+   money: "-0.05", "123456789012.34". *)
+let string_of_money_cents (cents : int) : string =
+  let z = Z.of_int cents in
+  let units, cents = Z.div_rem (Z.abs z) (Z.of_int 100) in
+  Printf.sprintf "%s%s.%02d"
+    (if Z.sign z < 0 then "-" else "")
+    (Z.to_string units) (Z.to_int cents)
+
 (* Runtime names, as an ordinary read produces them and the editor's option form
    expects them. The surface keyword is the writer's business. *)
 let option_enum_name = EnumName.to_string ConstantNames.option_enum
@@ -229,7 +302,7 @@ let rec get_value : type a.
     match Mark.remove e with
     | ELit (LBool b) -> O.Bool b
     | ELit (LInt i) -> O.Integer (Z.to_int i)
-    | ELit (LRat r) -> O.Decimal (Q.to_float r)
+    | ELit (LRat r) -> O.Decimal (string_of_decimal r)
     | ELit (LMoney m) -> O.Money (Z.to_int m)
     | ELit (LDate t) ->
       let year, month, day = Dates_calc.date_to_ymd t in
@@ -250,6 +323,23 @@ let rec get_value : type a.
           O.Duration { years = y2; months = m2; days = d2 } ) ->
         O.Duration { years = y1 + y2; months = m1 + m2; days = d1 + d2 }
       | _ -> Message.error ~pos "Invalid duration literal.")
+    (* `(1.0 / 3.0)`: how [write] spells a decimal without a finite decimal
+       expansion. *)
+    | EAppOp
+        {
+          op = Op.Div, _;
+          args = [e1; e2];
+          tys = [(TLit TRat, _); (TLit TRat, _)];
+        } -> (
+      match
+        (get_value lang decl_ctx e1).value, (get_value lang decl_ctx e2).value
+      with
+      | O.Decimal n, O.Decimal d ->
+        let d = decimal_of_string d in
+        if Q.sign d = 0 then
+          Message.error ~pos "Invalid decimal literal: division by zero."
+        else O.Decimal (string_of_decimal (Q.div (decimal_of_string n) d))
+      | _ -> Message.error ~pos "Invalid decimal literal.")
     | EArray args ->
       O.Array (Array.of_list (List.map (get_value lang decl_ctx) args))
     | EStruct { name; fields } ->
@@ -656,11 +746,19 @@ let rec print_catala_value ~(typ : O.typ option) ~lang ppf (v : O.runtime_value)
     if m < 0 then fprintf ppf "-";
     fprintf ppf strings.money_fmt major minor
   | _, O.Integer i -> pp_print_int ppf i
-  | _, O.Decimal f ->
-    let s = sprintf "%g" f in
-    let s = if String.contains s '.' then s else sprintf "%.1f" f in
-    pp_print_string ppf
-      (String.map (function '.' -> strings.decimal_sep | c -> c) s)
+  | _, O.Decimal d ->
+    (* Exact: a literal when the decimal expansion is finite, a division of two
+       literals otherwise *)
+    let q = decimal_of_string d in
+    let literal s =
+      String.map (function '.' -> strings.decimal_sep | c -> c) s
+    in
+    let s = string_of_decimal q in
+    if String.contains s '/' then
+      fprintf ppf "(%s / %s)"
+        (literal (string_of_decimal (Q.of_bigint (Q.num q))))
+        (literal (string_of_decimal (Q.of_bigint (Q.den q))))
+    else pp_print_string ppf (literal s)
   | _, O.Date { year; month; day } ->
     fprintf ppf "|%04d-%02d-%02d|" year month day
   | _, O.Duration { years = 0; months = 0; days = 0 } ->

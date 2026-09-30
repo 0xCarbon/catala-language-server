@@ -1,0 +1,15 @@
+> Module Rates
+
+```catala-metadata
+declaration scope Scale:
+  input rate content decimal
+  input base content money
+  output scaled content decimal
+  output amount content money
+```
+
+```catala
+scope Scale:
+  definition scaled equals rate * 3.0
+  definition amount equals base
+```

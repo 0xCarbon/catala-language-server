@@ -90,7 +90,7 @@ let rec generate_default_value lang (typ : O.typ) : O.runtime_value =
     match typ with
     | TBool -> O.Bool false
     | TInt -> O.Integer 0
-    | TRat -> O.Decimal 0.
+    | TRat -> O.Decimal "0.0"
     | TMoney -> O.Money 0
     | TDate -> O.Date { year = 2000; month = 1; day = 1 }
     | TDuration -> O.Duration { years = 0; months = 0; days = 0 }
@@ -597,7 +597,7 @@ let rec convert_atd_to_runtime_value : O.runtime_value -> Catala_runtime.Value.t
   | O.Bool b -> V (Bool, b)
   | Money m -> V (Money, Z.of_int m)
   | Integer i -> V (Integer, Z.of_int i)
-  | Decimal d -> V (Decimal, Q.of_float d)
+  | Decimal d -> V (Decimal, decimal_of_string d)
   | Date { year; month; day } -> V (Date, Dates_calc.make_date ~year ~month ~day)
   | Duration { years; months; days } ->
     V (Duration, Dates_calc.make_period ~years ~months ~days)
@@ -608,15 +608,23 @@ let rec convert_atd_to_runtime_value : O.runtime_value -> Catala_runtime.Value.t
       |> List.assoc cstr_s
     in
     V
-      ( Enum { name = decl.enum_name; constr = (fun _ -> index, cstr_s, v) },
+      ( Enum
+          {
+            name = decl.enum_name;
+            constr = (fun _ -> index, cstr_s, v);
+            cases = [];
+          },
         (decl.enum_name, (cstr_s, v)) )
   | Struct (decl, fvl) ->
     let l = List.map (fun (s, v) -> s, convert_atd_to_runtime_value v) fvl in
-    let ty = Struct { name = decl.struct_name; fields = (fun _ -> l) } in
+    let ty =
+      Struct
+        { name = decl.struct_name; fields = (fun _ -> l); build = Unbuildable }
+    in
     V (ty, (decl.struct_name, l))
   | Array l ->
     let l = Array.map convert_atd_to_runtime_value l in
-    V (Array Fun.id, l)
+    V (Array Dynamic, l)
   | Unset -> failwith "Cannot convert 'Unset' atd value to Catala runtime value"
   | NotOverridden ->
     failwith "Cannot convert 'NotOverridden' atd value to Catala runtime value"
@@ -672,9 +680,9 @@ let rec convert_to_json_input ({ value; _ } : O.runtime_value) : Yojson.Safe.t =
   let open O in
   let convert_runtime_raw = function
     | Bool b -> `Bool b
-    | Money i -> `String (string_of_float (float i /. 100.))
+    | Money i -> `String (string_of_money_cents i)
     | Integer i -> `String (string_of_int i)
-    | Decimal f -> `String (string_of_float f)
+    | Decimal d -> `String (string_of_decimal (decimal_of_string d))
     | Date { year; month; day } ->
       `String (Format.sprintf "%04d-%02d-%02d" year month day)
     | Duration { years; months; days } ->
@@ -705,7 +713,7 @@ let run_with_inputs
     include_dirs
     options
     tested_scope_name
-    (scope_input : Yojson.Safe.t) =
+    (scope_input : string) =
   let desugared_prg, _naming_ctx, scope_name, dcalc_prg =
     retrieve_program include_dirs options tested_scope_name
   in
@@ -720,7 +728,7 @@ let run_with_inputs
     in
     let ty = TStruct in_struct, Pos.void in
     let atd_test_inputs : O.runtime_value =
-      Lexing.from_string (Yojson.Safe.to_string scope_input)
+      Lexing.from_string scope_input
       |> J.read_test_inputs (Yojson.init_lexer ())
       |> fun fields ->
       {
@@ -744,9 +752,9 @@ let run_with_inputs
       }
     in
     let encoding = Encoding.make_encoding dcalc_prg.decl_ctx ty in
-    let module JsonE = Json_encoding.Make (Json_repr.Yojson) in
     let rval =
-      JsonE.destruct encoding (convert_to_json_input atd_test_inputs)
+      Encoding.parse_json encoding
+        (Yojson.Safe.to_string (convert_to_json_input atd_test_inputs))
     in
     Encoding.convert_to_dcalc dcalc_prg.decl_ctx
       (Typed { pos = Pos.void; ty })
@@ -972,13 +980,13 @@ let list_scopes include_dirs options =
   in
   print_scopes filtered_scopes
 
-let serialize_inputs (scope_input : Yojson.Safe.t option) =
+let serialize_inputs (scope_input : string option) =
   let scope_input =
     match scope_input with
     | None -> failwith "serialize-inputs requires --input"
     | Some i -> i
   in
-  Lexing.from_string (Yojson.Safe.to_string scope_input)
+  Lexing.from_string scope_input
   |> J.read_test_inputs (Yojson.init_lexer ())
   |> function
   | fields ->

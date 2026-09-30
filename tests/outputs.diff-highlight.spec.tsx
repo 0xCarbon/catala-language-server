@@ -22,7 +22,7 @@ describe('TestOutputsEditor diff highlighting (struct field)', () => {
       new Map([
         [
           'surface_hectares',
-          { value: { kind: 'Decimal', value: 15.12 }, attrs: [] },
+          { value: { kind: 'Decimal', value: '15.12' }, attrs: [] },
         ],
       ])
     );
@@ -48,8 +48,8 @@ describe('TestOutputsEditor diff highlighting (struct field)', () => {
           seg('StructField', outputName),
           seg('StructField', 'surface_hectares'),
         ],
-        expected: { value: { kind: 'Decimal', value: 15.12 }, attrs: [] },
-        actual: { value: { kind: 'Decimal', value: 15.1 }, attrs: [] },
+        expected: { value: { kind: 'Decimal', value: '15.12' }, attrs: [] },
+        actual: { value: { kind: 'Decimal', value: '15.1' }, attrs: [] },
       },
     ];
 

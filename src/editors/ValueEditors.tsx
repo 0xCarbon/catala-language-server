@@ -22,6 +22,13 @@ import type {
 } from '../generated/catala_types';
 import { ArrayEditor } from './ArrayEditor';
 import { assertUnreachable } from '../shared/util';
+import {
+  RAT_PATTERN,
+  formatCents,
+  isValidRat,
+  parseCents,
+  sameRat,
+} from '../shared/exactNumbers';
 import { Combobox } from './Combobox';
 import { CompositeEditor } from './CompositeEditor';
 import { countUnsetIn } from './unsetValidation';
@@ -464,12 +471,6 @@ function DateEditor(props: DateEditorProps): ReactElement {
   );
 }
 
-const RAT_PATTERN = /^-?\d+(\.\d*)?$/;
-
-function isValidRat(value: string): boolean {
-  return RAT_PATTERN.test(value);
-}
-
 type RatEditorProps = {
   valueDef?: ValueDef;
   onValueChange(newValue: RuntimeValue): void;
@@ -484,9 +485,7 @@ function RatEditor(props: RatEditorProps): ReactElement {
       ? runtimeValue.value.value
       : undefined;
 
-  const [displayValue, setDisplayValue] = useState(
-    initialValue?.toString() ?? ''
-  );
+  const [displayValue, setDisplayValue] = useState(initialValue ?? '');
   const [isInvalid, setIsInvalid] = useState(false);
   const vProps = useValidationHint(
     isInvalid ? 'invalid' : isUnset ? 'unset' : 'valid'
@@ -499,16 +498,11 @@ function RatEditor(props: RatEditorProps): ReactElement {
       runtimeValue?.value.kind === 'Decimal'
         ? runtimeValue.value.value
         : undefined;
-    if (parseFloat(displayValue) == newValue) {
-      // we're doing an equality check on floats here;
-      // but its sole purpose is to preserve user input when
-      // inputting a decimal separator, i.e. when
-      // the user is typing '13.4' in the process of typing
-      // '13.42' ; so the usefulness of this comparison is
-      // to keep the user-supplied string to '13.' instead of '13'
-      return;
-    }
-    setDisplayValue(newValue?.toString() ?? '');
+    // The text the user is typing may already denote the incoming value, in
+    // another spelling ('13.' comes back as '13.0' on the way to '13.42'):
+    // replacing it would eat their keystrokes.
+    if (newValue !== undefined && sameRat(displayValue, newValue)) return;
+    setDisplayValue(newValue ?? '');
   }, [runtimeValue, isInvalid]);
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
@@ -519,7 +513,7 @@ function RatEditor(props: RatEditorProps): ReactElement {
       setIsInvalid(false);
       const newValueRaw: RuntimeValueRaw = {
         kind: 'Decimal',
-        value: Number(valueStr),
+        value: valueStr,
       };
       props.onValueChange(createRuntimeValue(newValueRaw, runtimeValue));
     } else if (valueStr.trim() === '') {
@@ -791,12 +785,8 @@ function isValidMoney(value: string): boolean {
   return MONEY_PATTERN.test(value);
 }
 
-function centsOf(text: string): number {
-  return Math.round(parseFloat(text) * 100);
-}
-
 function centsToDisplayValue(cents: number | undefined): string {
-  return cents === undefined ? '' : (cents / 100).toFixed(2);
+  return cents === undefined ? '' : formatCents(cents);
 }
 
 type MoneyEditorProps = {
@@ -829,7 +819,7 @@ function MoneyEditor(props: MoneyEditorProps): ReactElement {
         : undefined;
     // The text the user is typing may already denote the incoming amount
     // ('12.' or '12.0' for 1200): reformatting it would eat their keystrokes.
-    if (isValidMoney(displayValue) && centsOf(displayValue) === newValue)
+    if (isValidMoney(displayValue) && parseCents(displayValue) === newValue)
       return;
     setDisplayValue(centsToDisplayValue(newValue));
   }, [runtimeValue, isInvalid]);
@@ -842,7 +832,7 @@ function MoneyEditor(props: MoneyEditorProps): ReactElement {
       setIsInvalid(false);
       const newValueRaw: RuntimeValueRaw = {
         kind: 'Money',
-        value: centsOf(valueStr),
+        value: parseCents(valueStr),
       };
       props.onValueChange(createRuntimeValue(newValueRaw, runtimeValue));
     } else if (valueStr.trim() === '') {
@@ -861,7 +851,7 @@ function MoneyEditor(props: MoneyEditorProps): ReactElement {
       return;
     }
     if (isValidMoney(displayValue)) {
-      setDisplayValue(centsToDisplayValue(centsOf(displayValue)));
+      setDisplayValue(centsToDisplayValue(parseCents(displayValue)));
     }
   };
 

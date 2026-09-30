@@ -1,7 +1,7 @@
-(test
- (name carry_test)
+(tests
+ (names carry_test decimal_test)
  (package catala-lsp)
- (libraries testcase_lib catala_types_atd tezt)
- (modules carry_test)
+ (libraries testcase_lib catala_types_atd tezt qcheck zarith)
+ (modules carry_test decimal_test)
  (flags
   (:standard -open Catala_types_atd)))

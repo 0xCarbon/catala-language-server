@@ -79,7 +79,7 @@ export type RuntimeValueRaw =
 | { kind: 'Bool'; value: boolean }
 | { kind: 'Money'; value: number /*int*/ }
 | { kind: 'Integer'; value: number /*int*/ }
-| { kind: 'Decimal'; value: number }
+| { kind: 'Decimal'; value: string }
 | { kind: 'Date'; value: Date }
 | { kind: 'Duration'; value: Duration }
 | { kind: 'Enum'; value: [EnumDeclaration, [string, Option<RuntimeValue>]] }
@@ -562,7 +562,7 @@ export function writeRuntimeValueRaw(x: RuntimeValueRaw, context: any = x): any 
     case 'Integer':
       return ['Integer', _atd_write_int(x.value, x)]
     case 'Decimal':
-      return ['Decimal', _atd_write_float(x.value, x)]
+      return ['Decimal', _atd_write_string(x.value, x)]
     case 'Date':
       return ['Date', writeDate(x.value, x)]
     case 'Duration':
@@ -606,7 +606,7 @@ export function readRuntimeValueRaw(x: any, context: any = x): RuntimeValueRaw {
       case 'Integer':
         return { kind: 'Integer', value: _atd_read_int(x[1], x) }
       case 'Decimal':
-        return { kind: 'Decimal', value: _atd_read_float(x[1], x) }
+        return { kind: 'Decimal', value: _atd_read_string(x[1], x) }
       case 'Date':
         return { kind: 'Date', value: readDate(x[1], x) }
       case 'Duration':

@@ -641,7 +641,7 @@ let evaluate_operator
     | Mult_mon_rat, [(ELit (LMoney x), _); (ELit (LRat y), _)] ->
       Lwt.return (ELit (LMoney (o_mult_mon_rat x y)))
     | Mult_dur_int, [(ELit (LDuration x), _); (ELit (LInt y), _)] ->
-      Lwt.return (ELit (LDuration (o_mult_dur_int x y)))
+      Lwt.return (ELit (LDuration (o_mult_dur_int (rpos ()) x y)))
     | Div_int_int, [(ELit (LInt x), _); (ELit (LInt y), _)] ->
       Lwt.return (ELit (LRat (o_div_int_int (div_pos ()) x y)))
     | Div_rat_rat, [(ELit (LRat x), _); (ELit (LRat y), _)] ->

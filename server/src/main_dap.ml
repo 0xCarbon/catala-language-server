@@ -391,6 +391,9 @@ let set_handlers rpc =
           "Unexpected arguments provided in the launch configuration"
       | Some { uri; scope; inputs } ->
         let* final_state =
+          (* The launch request arrives parsed; the interpreter reads the inputs
+             from JSON text *)
+          let inputs = Option.map Yojson.Safe.to_string inputs in
           DE.run_debugger rpc ~file:uri ~scope ?inputs logger
         in
         state := Some final_state;

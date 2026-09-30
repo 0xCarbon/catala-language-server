@@ -203,7 +203,7 @@ let read_partial_test_one
       match translate_literal l Pos.void with
       | LBool b -> ok O.TBool (O.Bool b)
       | LInt z -> ok O.TInt (O.Integer (Z.to_int z))
-      | LRat q -> ok O.TRat (O.Decimal (Q.to_float q))
+      | LRat q -> ok O.TRat (O.Decimal (string_of_decimal q))
       | LMoney m -> ok O.TMoney (O.Money (Z.to_int m))
       | LUnit -> assert false
       | LDate d ->
@@ -320,6 +320,27 @@ let read_partial_test_one
                months = a.O.months + b.O.months;
                days = a.O.days + b.O.days;
              })
+      | _ -> Error "unsupported expression")
+    (* `-2.0` and `(1.0 / 3.0)`: how [write] spells a negative number and a
+       decimal without a finite decimal expansion. Still literals. *)
+    | Paren inner -> convert_literal inner
+    | Unop ((Minus _, _), sube) -> (
+      let*? t, v = convert_literal sube in
+      match t, v.O.value with
+      | O.TInt, O.Integer i -> ok O.TInt (O.Integer (-i))
+      | O.TRat, O.Decimal d ->
+        ok O.TRat (O.Decimal (string_of_decimal (Q.neg (decimal_of_string d))))
+      | _ -> Error "unsupported expression")
+    | Binop ((Div _, _), lhs, rhs) -> (
+      let*? lt, lv = convert_literal lhs in
+      let*? rt, rv = convert_literal rhs in
+      match lt, lv.O.value, rt, rv.O.value with
+      | O.TRat, O.Decimal n, O.TRat, O.Decimal d
+        when Q.sign (decimal_of_string d) <> 0 ->
+        ok O.TRat
+          (O.Decimal
+             (string_of_decimal
+                (Q.div (decimal_of_string n) (decimal_of_string d))))
       | _ -> Error "unsupported expression")
     | _ -> Error "unsupported expression"
   in

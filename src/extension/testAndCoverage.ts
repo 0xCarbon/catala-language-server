@@ -9,6 +9,7 @@ import {
   updateOpenCustomEditorWithResults,
 } from './testCaseEditorProvider';
 import { runTestScope } from '../test-case-editor/testCaseCompilerInterop';
+import { formatCents } from '../shared/exactNumbers';
 import type {
   Diff,
   RuntimeValue,
@@ -197,7 +198,7 @@ function formatDiffs(diffs: Diff[]): string {
       case 'Decimal':
         return String(rv.value.value);
       case 'Money':
-        return `$${(rv.value.value / 100).toFixed(2)}`;
+        return `$${formatCents(rv.value.value)}`;
       case 'Date': {
         const d = rv.value.value;
         return `|${d.year}-${String(d.month).padStart(2, '0')}-${String(d.day).padStart(2, '0')}|`;
